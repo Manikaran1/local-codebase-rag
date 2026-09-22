@@ -2,7 +2,6 @@
 
 import subprocess
 
-
 COMMANDS = [
     ["ruff", "check", "."],
     ["mypy", "src"],
