@@ -1,7 +1,6 @@
 """Convenience quality-check runner."""
 
 import subprocess
-import sys
 
 
 COMMANDS = [
