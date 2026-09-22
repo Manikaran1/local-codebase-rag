@@ -1,7 +1,0 @@
-interface:
-  display_name: "Disciplined Engineering"
-  short_description: "Ship scoped, tested work with meaningful commits."
-  default_prompt: "Use the disciplined engineering workflow for this repository task."
-
-policy:
-  allow_implicit_invocation: true
