@@ -24,6 +24,11 @@ class CodeChunker(Chunker):
         lines = text.splitlines(keepends=True)
         if not lines:
             return []
+        line_offsets: list[int] = []
+        source_offset = 0
+        for line in lines:
+            line_offsets.append(source_offset)
+            source_offset += len(line)
         children_by_parent: dict[str, list[Symbol]] = defaultdict(list)
         roots: list[Symbol] = []
         for symbol in symbols:
@@ -51,18 +56,28 @@ class CodeChunker(Chunker):
                 self._emit_raw(
                     source,
                     lines,
+                    line_offsets,
                     cursor,
                     start_line - 1,
                     result,
                     metadata={"chunk_kind": "module"},
                 )
-            self._emit_symbol_group(source, lines, group, children_by_parent, result, None)
+            self._emit_symbol_group(
+                source,
+                lines,
+                line_offsets,
+                group,
+                children_by_parent,
+                result,
+                None,
+            )
             cursor = max(cursor, end_line + 1)
 
         if cursor <= len(lines):
             self._emit_raw(
                 source,
                 lines,
+                line_offsets,
                 cursor,
                 len(lines),
                 result,
@@ -74,6 +89,7 @@ class CodeChunker(Chunker):
         self,
         source: SourceFile,
         lines: list[str],
+        line_offsets: list[int],
         group: list[Symbol],
         children_by_parent: dict[str, list[Symbol]],
         result: list[Chunk],
@@ -98,6 +114,7 @@ class CodeChunker(Chunker):
                 source,
                 text,
                 start_line,
+                line_offsets[start_line - 1],
                 group[0],
                 metadata,
                 result,
@@ -132,12 +149,21 @@ class CodeChunker(Chunker):
                         source,
                         text,
                         SourceSpan(start_line, end_line),
+                        line_offsets[start_line - 1],
                         symbol,
                         metadata,
                     )
                 )
             else:
-                self._emit_bounded(source, text, start_line, symbol, metadata, result)
+                self._emit_bounded(
+                    source,
+                    text,
+                    start_line,
+                    line_offsets[start_line - 1],
+                    symbol,
+                    metadata,
+                    result,
+                )
             return
 
         cursor = start_line
@@ -148,49 +174,72 @@ class CodeChunker(Chunker):
                 self._emit_raw(
                     source,
                     lines,
+                    line_offsets,
                     cursor,
                     child_start - 1,
                     result,
                     symbol=symbol,
                     metadata={"chunk_kind": "symbol_fragment", "oversized_symbol": True},
+                    preserve_whitespace=True,
                 )
-            self._emit_symbol_group(source, lines, child_group, children_by_parent, result, symbol)
+            self._emit_symbol_group(
+                source,
+                lines,
+                line_offsets,
+                child_group,
+                children_by_parent,
+                result,
+                symbol,
+            )
             cursor = max(cursor, child_end + 1)
         if cursor <= end_line:
             self._emit_raw(
                 source,
                 lines,
+                line_offsets,
                 cursor,
                 end_line,
                 result,
                 symbol=symbol,
                 metadata={"chunk_kind": "symbol_fragment", "oversized_symbol": True},
+                preserve_whitespace=True,
             )
 
     def _emit_raw(
         self,
         source: SourceFile,
         lines: list[str],
+        line_offsets: list[int],
         start_line: int,
         end_line: int,
         result: list[Chunk],
         *,
         symbol: Symbol | None = None,
         metadata: dict[str, Any],
+        preserve_whitespace: bool = False,
     ) -> None:
         text = self._line_slice(lines, start_line, end_line)
-        if not text.strip():
+        if not preserve_whitespace and not text.strip():
             return
         complete_metadata = dict(metadata)
         if symbol is not None:
             complete_metadata["symbol_qualified_name"] = symbol.qualified_name
-        self._emit_bounded(source, text, start_line, symbol, complete_metadata, result)
+        self._emit_bounded(
+            source,
+            text,
+            start_line,
+            line_offsets[start_line - 1],
+            symbol,
+            complete_metadata,
+            result,
+        )
 
     def _emit_bounded(
         self,
         source: SourceFile,
         text: str,
         start_line: int,
+        source_offset: int,
         symbol: Symbol | None,
         metadata: dict[str, Any],
         result: list[Chunk],
@@ -207,13 +256,23 @@ class CodeChunker(Chunker):
             if not piece:
                 continue
             span = line_map.span(start_line, start, end)
-            result.append(self._make_chunk(source, piece, span, symbol, metadata))
+            result.append(
+                self._make_chunk(
+                    source,
+                    piece,
+                    span,
+                    source_offset + start,
+                    symbol,
+                    metadata,
+                )
+            )
 
     def _make_chunk(
         self,
         source: SourceFile,
         text: str,
         span: SourceSpan,
+        source_offset: int,
         symbol: Symbol | None,
         metadata: dict[str, Any],
     ) -> Chunk:
@@ -222,8 +281,7 @@ class CodeChunker(Chunker):
                 file_id=source.id,
                 span=span,
                 text=text,
-                symbol_id=symbol.id if symbol is not None else None,
-                metadata=metadata,
+                source_offset=source_offset,
             ),
             project_id=source.project_id,
             file_id=source.id,

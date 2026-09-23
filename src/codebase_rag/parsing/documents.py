@@ -36,6 +36,7 @@ class MarkdownTextParser(DocumentParser):
 
     def parse_markdown(self, text: str) -> ParsedDocument:
         lines = text.splitlines(keepends=True)
+        line_offsets = self._line_offsets(lines)
         blocks: list[DocumentBlock] = []
         heading_stack: list[tuple[int, str]] = []
         index = 0
@@ -67,6 +68,7 @@ class MarkdownTextParser(DocumentParser):
                         text="".join(lines[index:end]),
                         span=SourceSpan(index + 1, end),
                         heading_path=tuple(title for _, title in heading_stack),
+                        source_offset=line_offsets[index],
                     )
                 )
                 index = end
@@ -84,6 +86,7 @@ class MarkdownTextParser(DocumentParser):
                         heading_level=level,
                         heading_path=tuple(item for _, item in heading_stack),
                         title=title,
+                        source_offset=line_offsets[index],
                     )
                 )
                 index += 1
@@ -103,6 +106,7 @@ class MarkdownTextParser(DocumentParser):
                         heading_level=level,
                         heading_path=tuple(item for _, item in heading_stack),
                         title=title,
+                        source_offset=line_offsets[index],
                     )
                 )
                 index += 2
@@ -123,6 +127,7 @@ class MarkdownTextParser(DocumentParser):
                     text="".join(lines[index:end]),
                     span=SourceSpan(index + 1, end),
                     heading_path=tuple(item for _, item in heading_stack),
+                    source_offset=line_offsets[index],
                 )
             )
             index = end
@@ -131,6 +136,7 @@ class MarkdownTextParser(DocumentParser):
 
     def parse_plain_text(self, text: str, *, is_fallback: bool = False) -> ParsedDocument:
         lines = text.splitlines(keepends=True)
+        line_offsets = self._line_offsets(lines)
         blocks: list[DocumentBlock] = []
         index = 0
         while index < len(lines):
@@ -145,10 +151,20 @@ class MarkdownTextParser(DocumentParser):
                     kind="paragraph",
                     text="".join(lines[index:end]),
                     span=SourceSpan(index + 1, end),
+                    source_offset=line_offsets[index],
                 )
             )
             index = end
         return ParsedDocument(blocks=tuple(blocks), is_fallback=is_fallback)
+
+    @staticmethod
+    def _line_offsets(lines: list[str]) -> list[int]:
+        offsets: list[int] = []
+        current = 0
+        for line in lines:
+            offsets.append(current)
+            current += len(line)
+        return offsets
 
     @staticmethod
     def _atx_heading(line: str) -> tuple[int, str] | None:

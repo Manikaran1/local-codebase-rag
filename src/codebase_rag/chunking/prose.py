@@ -43,7 +43,15 @@ class ProseChunker(DocumentChunker):
                 if not text:
                     continue
                 span = line_map.span(block.span.start_line, start, end)
-                chunks.append(self._make_chunk(source, text, span, metadata))
+                chunks.append(
+                    self._make_chunk(
+                        source,
+                        text,
+                        span,
+                        block.source_offset + start,
+                        metadata,
+                    )
+                )
         return chunks
 
     @staticmethod
@@ -51,6 +59,7 @@ class ProseChunker(DocumentChunker):
         source: SourceFile,
         text: str,
         span: SourceSpan,
+        source_offset: int,
         metadata: dict[str, Any],
     ) -> Chunk:
         return Chunk(
@@ -58,8 +67,7 @@ class ProseChunker(DocumentChunker):
                 file_id=source.id,
                 span=span,
                 text=text,
-                symbol_id=None,
-                metadata=metadata,
+                source_offset=source_offset,
             ),
             project_id=source.project_id,
             file_id=source.id,

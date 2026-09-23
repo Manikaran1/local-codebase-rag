@@ -68,6 +68,72 @@ def test_oversized_nested_symbol_splits_with_bounded_spans() -> None:
     assert [chunk.id for chunk in chunks] == [chunk.id for chunk in repeated]
 
 
+def test_oversized_symbol_preserves_interior_whitespace_and_comments() -> None:
+    source = _source("sample.py", "Python")
+    text = (
+        "class Store:\n"
+        "    def first(self):\n"
+        "        return 'first'\n"
+        "\n"
+        "    def second(self):\n"
+        "        return 'second'\n"
+        "\n"
+        "    # Preserve this note between child symbols.\n"
+        "    def third(self):\n"
+        "        return 'third'\n"
+    )
+    symbols = ParserDispatcher().parse(source, text).symbols
+    chunker = CodeChunker(max_chunk_chars=64)
+
+    chunks = chunker.chunk(source, text, list(symbols))
+    repeated = chunker.chunk(source, text, list(symbols))
+
+    assert len(text) > 64
+    assert "".join(chunk.text for chunk in chunks) == text
+    assert all(len(chunk.text) <= 64 for chunk in chunks)
+    assert [chunk.id for chunk in chunks] == [chunk.id for chunk in repeated]
+    assert [chunk.text for chunk in chunks] == [chunk.text for chunk in repeated]
+    assert any(chunk.text == "\n" and chunk.span == SourceSpan(4, 4) for chunk in chunks)
+    assert any(
+        chunk.text == "\n    # Preserve this note between child symbols.\n"
+        and chunk.span == SourceSpan(7, 8)
+        for chunk in chunks
+    )
+
+    symbols_by_name = {symbol.qualified_name: symbol for symbol in symbols}
+    second_method = next(chunk for chunk in chunks if chunk.symbol_name == "Store.second")
+    assert second_method.symbol_id == symbols_by_name["Store.second"].id
+    assert second_method.metadata["parent_symbol_id"] == symbols_by_name["Store"].id
+
+
+def test_top_level_whitespace_between_symbols_does_not_emit_a_chunk() -> None:
+    source = _source("sample.py", "Python")
+    text = "def first():\n    return 1\n\n\n\ndef second():\n    return 2\n"
+    symbols = ParserDispatcher().parse(source, text).symbols
+
+    chunks = CodeChunker(max_chunk_chars=100).chunk(source, text, list(symbols))
+
+    assert [chunk.text for chunk in chunks] == [
+        "def first():\n    return 1\n",
+        "def second():\n    return 2\n",
+    ]
+
+
+def test_identical_code_fragments_on_one_line_have_distinct_stable_ids() -> None:
+    source = _source("module.py", "Python")
+    text = "x=" + "a" * 20 + "\n"
+    chunker = CodeChunker(max_chunk_chars=2)
+
+    chunks = chunker.chunk(source, text, [])
+    repeated = chunker.chunk(source, text, [])
+    repeated_fragments = [chunk for chunk in chunks if chunk.text == "aa"]
+
+    assert len(repeated_fragments) > 1
+    assert all(chunk.span == SourceSpan(1, 1) for chunk in repeated_fragments)
+    assert len({chunk.id for chunk in repeated_fragments}) == len(repeated_fragments)
+    assert [chunk.id for chunk in chunks] == [chunk.id for chunk in repeated]
+
+
 def test_large_module_level_text_is_also_bounded() -> None:
     source = _source("module.py", "Python")
     text = "VALUE = 'abcdefghijklmnopqrstuvwxyz'\nOTHER = 'abcdefghijklmnopqrstuvwxyz'\n"
@@ -113,6 +179,23 @@ def test_prose_oversized_paragraph_spans_advance_deterministically() -> None:
     assert all(chunk.span.start_line <= chunk.span.end_line for chunk in chunks)
     assert chunks[0].span.start_line == chunks[0].span.end_line == 1
     assert all(chunk.span.start_line == chunk.span.end_line == 2 for chunk in chunks[1:])
+
+
+def test_identical_prose_fragments_on_one_line_have_distinct_stable_ids() -> None:
+    source = _source("notes.txt", "text")
+    text = "echo echo echo echo\n"
+    document = ParserDispatcher().parse(source, text).document
+    assert document is not None
+    chunker = ProseChunker(max_chunk_chars=5)
+
+    chunks = chunker.chunk(source, document)
+    repeated = chunker.chunk(source, document)
+    repeated_fragments = [chunk for chunk in chunks if chunk.text == "echo "]
+
+    assert len(repeated_fragments) > 1
+    assert all(chunk.span == SourceSpan(1, 1) for chunk in repeated_fragments)
+    assert len({chunk.id for chunk in repeated_fragments}) == len(repeated_fragments)
+    assert [chunk.id for chunk in chunks] == [chunk.id for chunk in repeated]
 
 
 def test_multiple_paragraphs_and_heading_transitions_stay_separate() -> None:

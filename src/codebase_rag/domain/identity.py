@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from hashlib import sha256
-from typing import Any
 
 from codebase_rag.domain.models import SourceSpan
 
@@ -30,16 +29,19 @@ def chunk_id_for(
     file_id: str,
     span: SourceSpan,
     text: str,
-    symbol_id: str | None,
-    metadata: dict[str, Any],
+    source_offset: int | None = None,
 ) -> str:
-    """Return a stable ID from file identity, source range, content, and metadata."""
-    identity = {
-        "file_id": file_id,
-        "span": [span.start_line, span.end_line],
-        "content_hash": content_hash_for(text),
-        "symbol_id": symbol_id,
-        "metadata": metadata,
-    }
-    payload = json.dumps(identity, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    """Return a stable ID from source identity, content, and optional source offset.
+
+    The offset disambiguates identical chunks that share a line-only source span.
+    """
+    identity: list[str | int] = [
+        file_id,
+        span.start_line,
+        span.end_line,
+        content_hash_for(text),
+    ]
+    if source_offset is not None:
+        identity.append(source_offset)
+    payload = json.dumps(identity, separators=(",", ":"), ensure_ascii=False)
     return sha256(f"chunk\0{payload}".encode()).hexdigest()

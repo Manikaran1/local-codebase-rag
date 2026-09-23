@@ -45,6 +45,7 @@ class DocumentBlock:
     heading_level: int | None = None
     heading_path: tuple[str, ...] = ()
     title: str | None = None
+    source_offset: int = 0
 
 
 @dataclass(frozen=True)

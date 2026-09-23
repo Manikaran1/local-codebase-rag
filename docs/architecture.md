@@ -279,8 +279,11 @@ Suggested scheme:
 ```text
 project_id = hash(canonical_repository_path)
 file_id    = hash(project_id + relative_path)
-chunk_id   = hash(file_id + span + content_hash)
+chunk_id   = hash(file_id + span + content_hash + source_offset)
 ```
+
+`source_offset` is a zero-based character offset used to distinguish identical chunks that share
+the same line-only span. Descriptive metadata does not participate in chunk identity.
 
 Repository moves may later require user-defined project IDs.
 
