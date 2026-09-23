@@ -2,7 +2,7 @@
 
 ## Current state
 
-**Stage:** Phase 1 — repository ingestion complete and merged
+**Stage:** Phase 1 complete; next execution unit is combined Phase 2–3 parsing, document ingestion, and chunking (Issue #2)
 **Target:** v0.1.0  
 **Visibility recommendation:** Private until the retrieval core is demonstrably usable.
 
@@ -28,11 +28,13 @@
 
 ## Next implementation tasks
 
-- [ ] implement text ingestion
-- [ ] introduce Tree-sitter parser adapter
-- [ ] implement Python symbol parser
-- [ ] implement structural chunker
-- [ ] choose first vector backend based on benchmark/operational fit
-- [ ] implement embedding provider
-- [ ] implement BM25 index
-- [ ] implement hybrid retrieval baseline
+- [ ] Issue #2 — implement combined parsing, Markdown/text ingestion, Python symbol extraction, and structural/prose chunking
+- [ ] Issue #4 — implement local embeddings, vector index, and BM25 index
+- [ ] Issue #5 — implement hybrid retrieval, fusion, reranking, and diagnostics
+- [ ] Issue #6 — implement citation-aware context building, local generation, and CLI workflow
+- [ ] Issue #7 — build retrieval evaluation and regression gates
+- [ ] Issue #8 — expose stable application services through FastAPI
+
+## Planning note
+
+GitHub Issue #3 has been folded into Issue #2. Parsing and chunking now form one implementation unit so symbol/document boundaries, source spans, chunk metadata, and deterministic IDs are designed and tested together rather than across two partially overlapping phases.

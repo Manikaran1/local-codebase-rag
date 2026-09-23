@@ -4,7 +4,7 @@ A **local-first retrieval-augmented generation assistant for understanding softw
 
 Local Codebase RAG is designed to index a software project, understand source structure, retrieve relevant code and documentation through hybrid search, and answer questions with precise file and line-level citations — while keeping source code and project context on the local machine.
 
-> **Status:** Private pre-development repository  
+> **Status:** Private early-development repository  
 > **Current target:** v0.1.0 — reliable local codebase indexing, hybrid retrieval, local generation, and source-grounded answers.
 
 ---
@@ -249,13 +249,11 @@ The project currently contains:
 - domain contracts
 - module boundaries
 - project configuration
-- source-package skeleton
-- test skeleton
-- evaluation plan
+- implemented repository ingestion and filtering
+- source-package skeleton for later stages
+- test and evaluation foundations
 - CI definition
 - contribution and security guidance
-
-Most source modules are intentionally interfaces or stubs at this stage. Implementation should proceed from the ingestion and domain layers outward.
 
 ### Repository discovery
 
@@ -274,24 +272,18 @@ when constructing a scanner.
 
 ## Development order
 
+GitHub issues are the execution units for v0.1. Parsing, document ingestion, and chunking are intentionally implemented together because they share source-boundary and metadata contracts.
+
 ```text
-1. Domain models and configuration
-2. Repository scanner
-3. Text ingestion
-4. Code parser abstraction
-5. Python / initial language parser
-6. Structural chunking
-7. Embedding adapter
-8. Vector index
-9. BM25 lexical index
-10. Hybrid retrieval
-11. Reranking
-12. Citation-aware context builder
-13. Local LLM adapter
-14. CLI
-15. Retrieval evaluation suite
-16. FastAPI service
-17. Additional language support
+1. Repository ingestion and filtering — Issue #1 (complete)
+2. Parsing + document ingestion + structural/prose chunking — Issue #2
+   - Issue #3 is folded into Issue #2 and is not implemented separately
+3. Local embeddings + vector index + BM25 — Issue #4
+4. Hybrid retrieval + fusion + reranking — Issue #5
+5. Citation-aware generation + CLI workflow — Issue #6
+6. Retrieval evaluation and regression gates — Issue #7
+7. FastAPI application surface — Issue #8
+8. Additional language support — after the core v0.1 path is stable
 ```
 
 See [`docs/development-plan.md`](docs/development-plan.md).
