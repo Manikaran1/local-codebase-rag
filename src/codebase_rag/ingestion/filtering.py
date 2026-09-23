@@ -19,7 +19,6 @@ class IgnoreSource:
 
     directory: PurePosixPath
     spec: GitIgnoreSpec
-    has_negations: bool
 
 
 @dataclass(frozen=True)
@@ -28,8 +27,6 @@ class IgnoreDecision:
 
     ignored_by_repository: bool
     ignored_by_defaults: bool
-    repository_may_reinclude_descendants: bool
-    defaults_may_reinclude_descendants: bool
 
 
 def compile_ignore_spec(
@@ -74,7 +71,6 @@ def load_gitignore(directory: Path, relative_directory: PurePosixPath) -> Ignore
     return IgnoreSource(
         directory=relative_directory,
         spec=spec,
-        has_negations=any(pattern.include is False for pattern in spec.patterns),
     )
 
 
@@ -84,40 +80,42 @@ def ignore_decision(
     is_directory: bool,
     repository_rules: tuple[IgnoreSource, ...],
     default_rules: GitIgnoreSpec | None,
-    default_rules_have_negations: bool,
 ) -> IgnoreDecision:
     """Evaluate scoped .gitignore files and scanner defaults for one entry."""
     repository_ignored = False
-    may_reinclude_descendants = False
     for source in repository_rules:
         scoped_path = relative_path.relative_to(source.directory).as_posix()
         if is_directory:
             scoped_path += "/"
-        repository_ignored = _apply_spec(source.spec, scoped_path, repository_ignored)
-        may_reinclude_descendants = may_reinclude_descendants or source.has_negations
+        repository_ignored = _apply_ignore_spec(
+            source.spec,
+            scoped_path,
+            inherited_ignored=repository_ignored,
+        )
 
     default_ignored = False
     if default_rules is not None:
         default_path = relative_path.as_posix()
         if is_directory:
             default_path += "/"
-        default_ignored = _apply_spec(default_rules, default_path, False)
+        default_ignored = default_rules.match_file(default_path)
 
     return IgnoreDecision(
         ignored_by_repository=repository_ignored,
         ignored_by_defaults=default_ignored,
-        repository_may_reinclude_descendants=may_reinclude_descendants,
-        defaults_may_reinclude_descendants=default_rules_have_negations,
     )
 
 
-def _apply_spec(spec: GitIgnoreSpec, path: str, initial_state: bool) -> bool:
-    """Apply matching patterns in order while preserving an inherited state."""
-    ignored = initial_state
-    for pattern in spec.patterns:
-        if pattern.match_file(path) is not None and pattern.include is not None:
-            ignored = pattern.include
-    return ignored
+def _apply_ignore_spec(spec: GitIgnoreSpec, path: str, inherited_ignored: bool) -> bool:
+    """Apply one scoped GitIgnoreSpec, retaining prior scope when it has no match."""
+    result = spec.check_file(path)
+    if result.index is None:
+        return inherited_ignored
+
+    # GitIgnoreSpec.match_file() is true when this path is ignored. check_file()
+    # distinguishes a matching negation from no matching rule, which matters
+    # when a more-specific .gitignore overrides an earlier scope.
+    return spec.match_file(path)
 
 
 def is_binary_sample(sample: bytes) -> bool:

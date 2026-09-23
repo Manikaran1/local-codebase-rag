@@ -34,13 +34,6 @@ class RepositoryScanner:
             self._settings.default_ignore_patterns,
             source_description="scanner default exclusions",
         )
-        self._default_rules_have_negations = (
-            self._default_ignore_spec is not None
-            and any(
-                pattern.include is False
-                for pattern in self._default_ignore_spec.patterns
-            )
-        )
 
     def scan(self, repository: Path) -> list[SourceFile]:
         """Return supported, readable text files in stable path order."""
@@ -131,15 +124,8 @@ class RepositoryScanner:
             is_directory=is_directory,
             repository_rules=repository_rules,
             default_rules=self._default_ignore_spec,
-            default_rules_have_negations=self._default_rules_have_negations,
         )
-        if decision.ignored_by_defaults and (
-            not is_directory or not decision.defaults_may_reinclude_descendants
-        ):
-            return None, None
-        if decision.ignored_by_repository and (
-            not is_directory or not decision.repository_may_reinclude_descendants
-        ):
+        if decision.ignored_by_defaults or decision.ignored_by_repository:
             return None, None
 
         path = Path(entry.path)

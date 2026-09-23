@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import os
 from hashlib import sha256
 from pathlib import Path
 
 import pytest
 
-from codebase_rag.config.settings import DEFAULT_SUPPORTED_EXTENSIONS, Settings
+from codebase_rag.config.settings import (
+    DEFAULT_IGNORE_PATTERNS,
+    DEFAULT_SUPPORTED_EXTENSIONS,
+    Settings,
+)
 from codebase_rag.domain.models import SourceFile
+from codebase_rag.ingestion import repository_scanner as scanner_module
 from codebase_rag.ingestion.filtering import RepositoryConfigurationError
 from codebase_rag.ingestion.hashing import file_id_for, project_id_for
 from codebase_rag.ingestion.repository_scanner import RepositoryScanner
@@ -82,35 +88,149 @@ def test_project_identity_uses_canonical_repository_path(tmp_path: Path) -> None
     assert direct_project_id == alias_project_id
 
 
-def test_repository_ignore_rules_and_nested_negation_are_respected(tmp_path: Path) -> None:
+def test_directory_only_pattern_distinguishes_files_from_directories(tmp_path: Path) -> None:
+    file_repository = tmp_path / "file-repository"
+    file_repository.mkdir()
+    (file_repository / ".gitignore").write_text("cache.py/\n", encoding="utf-8")
+    (file_repository / "cache.py").write_text("value = 1\n", encoding="utf-8")
+
+    directory_repository = tmp_path / "directory-repository"
+    nested_source = directory_repository / "cache.py" / "hidden.py"
+    nested_source.parent.mkdir(parents=True)
+    nested_source.write_text("value = 2\n", encoding="utf-8")
+    (directory_repository / ".gitignore").write_text("cache.py/\n", encoding="utf-8")
+
+    scanner = RepositoryScanner(Settings(_env_file=None))
+
+    assert [source.relative_path.as_posix() for source in scanner.scan(file_repository)] == [
+        "cache.py"
+    ]
+    assert scanner.scan(directory_repository) == []
+
+
+def test_direct_file_rule_and_directory_unignore_follow_git_precedence(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "project"
+    (repository / "folder").mkdir(parents=True)
+    (repository / ".gitignore").write_text(
+        "folder/\n!folder/\nfolder/keep.py\n",
+        encoding="utf-8",
+    )
+    (repository / "folder" / "keep.py").write_text("value = 1\n", encoding="utf-8")
+    (repository / "folder" / "drop.py").write_text("value = 2\n", encoding="utf-8")
+
+    sources = RepositoryScanner(Settings(_env_file=None)).scan(repository)
+
+    assert [source.relative_path.as_posix() for source in sources] == ["folder/drop.py"]
+
+
+def test_repository_and_nested_ignore_rules_apply_with_deeper_precedence(
+    tmp_path: Path,
+) -> None:
     repository = tmp_path / "project"
     repository.mkdir()
     (repository / ".gitignore").write_text(
-        "ignored.py\nignored_dir/\n!ignored_dir/keep.py\nnested/skip.py\n",
+        "ignored.py\nignored_dir/\nnested/skip.py\n",
         encoding="utf-8",
     )
     (repository / "included.py").write_text("x = 1\n", encoding="utf-8")
     (repository / "ignored.py").write_text("x = 2\n", encoding="utf-8")
     (repository / "ignored_dir" / "hidden.py").parent.mkdir(parents=True)
     (repository / "ignored_dir" / "hidden.py").write_text("x = 3\n", encoding="utf-8")
-    (repository / "ignored_dir" / "keep.py").write_text("x = 4\n", encoding="utf-8")
     (repository / "nested" / ".gitignore").parent.mkdir(parents=True)
     (repository / "nested" / ".gitignore").write_text(
-        "local-ignore.py\n!skip.py\n",
+        "*.py\n!skip.py\n",
         encoding="utf-8",
     )
     (repository / "nested" / "skip.py").write_text("x = 5\n", encoding="utf-8")
-    (repository / "nested" / "local-ignore.py").write_text("x = 6\n", encoding="utf-8")
     (repository / "nested" / "keep.py").write_text("x = 7\n", encoding="utf-8")
 
     sources = RepositoryScanner(Settings(_env_file=None)).scan(repository)
 
     assert [source.relative_path.as_posix() for source in sources] == [
-        "ignored_dir/keep.py",
         "included.py",
-        "nested/keep.py",
         "nested/skip.py",
     ]
+
+
+def test_negation_reincludes_a_file_when_its_parent_is_not_ignored(tmp_path: Path) -> None:
+    repository = tmp_path / "project"
+    folder = repository / "folder"
+    folder.mkdir(parents=True)
+    (repository / ".gitignore").write_text(
+        "folder/*\n!folder/keep.py\n",
+        encoding="utf-8",
+    )
+    (folder / "keep.py").write_text("value = 1\n", encoding="utf-8")
+    (folder / "drop.py").write_text("value = 2\n", encoding="utf-8")
+
+    sources = RepositoryScanner(Settings(_env_file=None)).scan(repository)
+
+    assert [source.relative_path.as_posix() for source in sources] == ["folder/keep.py"]
+
+
+def test_negated_child_under_ignored_parent_stays_ignored_and_is_not_traversed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = tmp_path / "project"
+    ignored_directory = repository / "ignored"
+    ignored_directory.mkdir(parents=True)
+    (repository / ".gitignore").write_text(
+        "ignored/\n!ignored/keep.py\n",
+        encoding="utf-8",
+    )
+    (ignored_directory / ".gitignore").write_text("!hidden.py\n", encoding="utf-8")
+    (ignored_directory / "keep.py").write_text("value = 1\n", encoding="utf-8")
+    (ignored_directory / "hidden.py").write_text("value = 2\n", encoding="utf-8")
+
+    original_scandir = os.scandir
+    scanned_directories: list[Path] = []
+
+    def record_scandir(path: str | os.PathLike[str]) -> os.ScandirIterator[str]:
+        scanned_directories.append(Path(path).resolve())
+        return original_scandir(path)
+
+    monkeypatch.setattr(scanner_module.os, "scandir", record_scandir)
+
+    sources = RepositoryScanner(Settings(_env_file=None)).scan(repository)
+
+    assert sources == []
+    assert ignored_directory.resolve() not in scanned_directories
+
+
+def test_unrelated_negation_does_not_traverse_ignored_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = tmp_path / "project"
+    ignored_directory = repository / "ignored"
+    ignored_directory.mkdir(parents=True)
+    (repository / ".gitignore").write_text(
+        "ignored/\n!some_other_path/file.py\n",
+        encoding="utf-8",
+    )
+    (ignored_directory / "hidden.py").write_text("value = 1\n", encoding="utf-8")
+    other_source = repository / "some_other_path" / "file.py"
+    other_source.parent.mkdir()
+    other_source.write_text("value = 2\n", encoding="utf-8")
+
+    original_scandir = os.scandir
+    scanned_directories: list[Path] = []
+
+    def record_scandir(path: str | os.PathLike[str]) -> os.ScandirIterator[str]:
+        scanned_directories.append(Path(path).resolve())
+        return original_scandir(path)
+
+    monkeypatch.setattr(scanner_module.os, "scandir", record_scandir)
+
+    sources = RepositoryScanner(Settings(_env_file=None)).scan(repository)
+
+    assert [source.relative_path.as_posix() for source in sources] == [
+        "some_other_path/file.py"
+    ]
+    assert ignored_directory.resolve() not in scanned_directories
 
 
 def test_default_exclusions_prune_common_generated_directories(tmp_path: Path) -> None:
@@ -120,24 +240,24 @@ def test_default_exclusions_prune_common_generated_directories(tmp_path: Path) -
     excluded_directories = (
         ".git",
         ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
         "__pycache__",
         ".codebase-rag",
         "build",
         "dist",
-        "indexes",
-        "models",
         "node_modules",
-        "vector_store",
         "venv",
         ".venv",
         ".vscode",
+        ".idea",
     )
     for directory in excluded_directories:
         path = repository / directory / "hidden.py"
         path.parent.mkdir(parents=True)
         path.write_text("x = 2\n", encoding="utf-8")
 
-    (repository / "state.db").write_text("local state", encoding="utf-8")
+    (repository / "state.db").write_text("plain text state", encoding="utf-8")
     (repository / "editor.swp").write_text("editor scratch", encoding="utf-8")
     (repository / "cache.pyc").write_text("compiled bytecode", encoding="utf-8")
     (repository / "Thumbs.db").write_text("metadata", encoding="utf-8")
@@ -151,7 +271,34 @@ def test_default_exclusions_prune_common_generated_directories(tmp_path: Path) -
 
     sources = RepositoryScanner(settings).scan(repository)
 
-    assert [source.relative_path.as_posix() for source in sources] == ["keep.py"]
+    assert [source.relative_path.as_posix() for source in sources] == [
+        "keep.py",
+        "state.db",
+    ]
+
+
+def test_generic_model_index_vector_and_env_directories_remain_indexable(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "project"
+    source_paths = (
+        "models/user.py",
+        "indexes/search.py",
+        "vector_store/adapter.py",
+        "env/settings.py",
+    )
+    for relative_path in source_paths:
+        path = repository / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("value = 1\n", encoding="utf-8")
+
+    sources = RepositoryScanner(Settings(_env_file=None)).scan(repository)
+
+    assert [source.relative_path.as_posix() for source in sources] == sorted(source_paths)
+    assert not any(
+        pattern in DEFAULT_IGNORE_PATTERNS
+        for pattern in ("models/", "indexes/", "vector_store/", "env/")
+    )
 
 
 def test_custom_default_exclusions_are_injectable(tmp_path: Path) -> None:
@@ -173,7 +320,7 @@ def test_default_exclusion_negation_can_restore_a_child_file(tmp_path: Path) -> 
     (repository / "cache" / "skip.py").write_text("x = 2\n", encoding="utf-8")
     settings = Settings(
         _env_file=None,
-        default_ignore_patterns=("cache/", "!cache/keep.py"),
+        default_ignore_patterns=("cache/*", "!cache/keep.py"),
     )
 
     sources = RepositoryScanner(settings).scan(repository)

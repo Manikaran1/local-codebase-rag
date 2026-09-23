@@ -2,7 +2,7 @@
 
 ## Current state
 
-**Stage:** Phase 1 — repository ingestion complete
+**Stage:** Phase 1 implementation complete; merge and CI validation tracked on the PR
 **Target:** v0.1.0  
 **Visibility recommendation:** Private until the retrieval core is demonstrably usable.
 
