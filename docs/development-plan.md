@@ -63,6 +63,9 @@ Exit condition:
 - every chunk retains its source file identity and source span
 - chunk IDs/content hashes are deterministic
 
+Status:
+- implemented on `feat/issue-2-parsing-chunking`; PR review pending
+
 ## Phase 4 — Indexing — GitHub Issue #4
 
 Deliverables:

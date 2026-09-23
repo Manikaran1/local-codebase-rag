@@ -12,7 +12,10 @@ def test_fixture_repository_produces_expected_manifest() -> None:
         "auth.py",
         "config.py",
         "database.py",
+        "guide.md",
         "nested/handlers.py",
+        "notes.txt",
+        "structure.py",
     ]
     assert all(source.project_id for source in sources)
     assert all(source.content_hash for source in sources)

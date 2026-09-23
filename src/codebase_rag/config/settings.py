@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     max_file_size_bytes: int = Field(default=DEFAULT_MAX_FILE_SIZE_BYTES, gt=0)
+    max_chunk_chars: int = Field(default=4000, gt=0)
     default_ignore_patterns: tuple[str, ...] = DEFAULT_IGNORE_PATTERNS
     supported_extensions: dict[str, str] = Field(
         default_factory=lambda: dict(DEFAULT_SUPPORTED_EXTENSIONS)

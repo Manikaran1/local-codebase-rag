@@ -2,7 +2,7 @@
 
 ## Current state
 
-**Stage:** Phase 1 complete; next execution unit is combined Phase 2–3 parsing, document ingestion, and chunking (Issue #2)
+**Stage:** Phases 1–3 implemented; Issue #2 PR review pending; next execution unit is Issue #4
 **Target:** v0.1.0  
 **Visibility recommendation:** Private until the retrieval core is demonstrably usable.
 
@@ -25,10 +25,14 @@
 - [x] .gitignore handling and default exclusions
 - [x] binary and maximum-size protection
 - [x] stable source IDs and content hashing
+- [x] Tree-sitter Python parsing with nested symbol metadata and source spans
+- [x] Markdown and plain-text document parsing
+- [x] deterministic structural code and prose chunking with bounded oversized fallbacks
+- [x] source-to-chunk processing boundary with explicit unsupported-language fallback
 
 ## Next implementation tasks
 
-- [ ] Issue #2 — implement combined parsing, Markdown/text ingestion, Python symbol extraction, and structural/prose chunking
+- [x] Issue #2 — implement combined parsing, Markdown/text ingestion, Python symbol extraction, and structural/prose chunking (PR review pending)
 - [ ] Issue #4 — implement local embeddings, vector index, and BM25 index
 - [ ] Issue #5 — implement hybrid retrieval, fusion, reranking, and diagnostics
 - [ ] Issue #6 — implement citation-aware context building, local generation, and CLI workflow
