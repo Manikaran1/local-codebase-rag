@@ -2,7 +2,7 @@
 
 ## Current state
 
-**Stage:** Repository foundation / pre-implementation  
+**Stage:** Phase 1 implementation complete; PR #9 CI passed; merge outstanding
 **Target:** v0.1.0  
 **Visibility recommendation:** Private until the retrieval core is demonstrably usable.
 
@@ -21,12 +21,13 @@
 - [x] evaluation strategy
 - [x] roadmap
 - [x] security guidance
+- [x] deterministic repository scanner and supported-file filtering
+- [x] .gitignore handling and default exclusions
+- [x] binary and maximum-size protection
+- [x] stable source IDs and content hashing
 
 ## Next implementation tasks
 
-- [ ] implement repository scanner
-- [ ] implement default ignore rules
-- [ ] implement content hashing
 - [ ] implement text ingestion
 - [ ] introduce Tree-sitter parser adapter
 - [ ] implement Python symbol parser

@@ -257,6 +257,19 @@ The project currently contains:
 
 Most source modules are intentionally interfaces or stubs at this stage. Implementation should proceed from the ingestion and domain layers outward.
 
+### Repository discovery
+
+Phase 1 provides RepositoryScanner.scan(path) as the local ingestion boundary. It returns shared
+SourceFile metadata in stable relative-path order, applies repository .gitignore files and a small
+built-in exclusion list, and accepts supported source and documentation extensions. Files larger
+than the configurable CODEBASE_RAG_MAX_FILE_SIZE_BYTES limit (2 MiB by default), binary files,
+unsupported extensions, and symbolic links beneath the repository root are skipped. A symlink
+passed as the repository root is resolved to its target before scanning. Scanning performs no
+network calls and does not parse file contents.
+
+The supported-extension map and scanner exclusions are defined in Settings and can be overridden
+when constructing a scanner.
+
 ---
 
 ## Development order
