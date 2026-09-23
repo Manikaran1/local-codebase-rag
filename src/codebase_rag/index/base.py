@@ -11,7 +11,15 @@ class VectorIndex(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def search(self, vector: list[float], limit: int) -> list[SearchHit]:
+    def search(self, project_id: str, vector: list[float], limit: int) -> list[SearchHit]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_file(self, project_id: str, file_id: str) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_project(self, project_id: str) -> int:
         raise NotImplementedError
 
 
@@ -21,5 +29,13 @@ class LexicalIndex(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def search(self, query: str, limit: int) -> list[SearchHit]:
+    def search(self, project_id: str, query: str, limit: int) -> list[SearchHit]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_file(self, project_id: str, file_id: str) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_project(self, project_id: str) -> int:
         raise NotImplementedError

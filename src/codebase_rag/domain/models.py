@@ -71,10 +71,17 @@ class Chunk:
 
 
 @dataclass(frozen=True)
+class EmbeddingSpec:
+    provider: str
+    model: str
+    normalized: bool
+
+
+@dataclass(frozen=True)
 class SearchHit:
     chunk: Chunk
     rank: int
-    fusion_score: float
+    fusion_score: float | None = None
     vector_score: float | None = None
     lexical_score: float | None = None
     rerank_score: float | None = None

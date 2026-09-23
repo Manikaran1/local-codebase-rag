@@ -149,7 +149,8 @@ Chunking policy:
 ### `embeddings`
 Converts textual chunk representations into vectors.
 
-This layer should not know which vector store is used.
+This layer should not know which vector store is used. The initial Sentence Transformers adapter is
+lazy, CPU-compatible, and local-files-only unless model acquisition is explicitly enabled.
 
 ### `index`
 Owns persistence and search primitives.
@@ -158,7 +159,10 @@ Two independent capabilities are required:
 - vector similarity
 - lexical/BM25
 
-The interface should support delete/reindex by project and file.
+The v0.1 reference backend stores chunks, float32 vectors, lexical tokens, and project index
+metadata in one SQLite database. Vector search uses NumPy exact cosine similarity. Searches are
+project-scoped, and file replacement updates both indexes in one SQLite transaction. Raw vector and
+lexical scores remain independent; fusion belongs to `retrieval`.
 
 ### `retrieval`
 Combines candidate retrieval and ranking.
@@ -255,7 +259,7 @@ metadata
 chunk
 vector_score?
 lexical_score?
-fusion_score
+fusion_score?
 rerank_score?
 rank
 ```

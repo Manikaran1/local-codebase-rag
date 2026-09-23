@@ -2,7 +2,7 @@
 
 ## Current state
 
-**Stage:** Phases 1–3 complete and merged; next planned execution unit is Issue #4
+**Stage:** Phases 1–3 complete and merged; Issue #4 implementation complete and pending PR review
 **Target:** v0.1.0  
 **Visibility recommendation:** Private until the retrieval core is demonstrably usable.
 
@@ -33,7 +33,7 @@
 ## Next implementation tasks
 
 - [x] Issue #2 — implement combined parsing, Markdown/text ingestion, Python symbol extraction, and structural/prose chunking
-- [ ] Issue #4 — implement local embeddings, vector index, and BM25 index
+- [ ] Issue #4 — implementation complete; PR review pending (not merged)
 - [ ] Issue #5 — implement hybrid retrieval, fusion, reranking, and diagnostics
 - [ ] Issue #6 — implement citation-aware context building, local generation, and CLI workflow
 - [ ] Issue #7 — build retrieval evaluation and regression gates

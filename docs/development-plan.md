@@ -64,7 +64,7 @@ Exit condition:
 - chunk IDs/content hashes are deterministic
 
 Status:
-- implemented on `feat/issue-2-parsing-chunking`; PR review pending
+- complete and merged
 
 ## Phase 4 — Indexing — GitHub Issue #4
 
@@ -78,6 +78,9 @@ Deliverables:
 
 Exit condition:
 - chunks can be indexed, retrieved, removed, and re-indexed deterministically
+
+Status:
+- implementation complete; PR review pending
 
 ## Phase 5 — Hybrid retrieval — GitHub Issue #5
 
