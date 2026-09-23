@@ -1,0 +1,3 @@
+The repository scanner accepts plain text.
+
+Each paragraph becomes a document block with a source line span.

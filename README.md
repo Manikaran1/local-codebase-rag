@@ -4,7 +4,7 @@ A **local-first retrieval-augmented generation assistant for understanding softw
 
 Local Codebase RAG is designed to index a software project, understand source structure, retrieve relevant code and documentation through hybrid search, and answer questions with precise file and line-level citations — while keeping source code and project context on the local machine.
 
-> **Status:** Private early-development repository  
+> **Status:** Private early-development repository<br>
 > **Current target:** v0.1.0 — reliable local codebase indexing, hybrid retrieval, local generation, and source-grounded answers.
 
 ---
@@ -268,6 +268,24 @@ network calls and does not parse file contents.
 The supported-extension map and scanner exclusions are defined in Settings and can be overridden
 when constructing a scanner.
 
+### Parsing and chunking
+
+Issue #2 adds a local source-to-chunk path through `SourceProcessor`. Python files use Tree-sitter
+to extract classes, functions, methods, signatures, parent links, and one-based source spans.
+Markdown files are divided into headings, paragraphs, and fenced code blocks; plain-text files are
+divided into paragraphs. Other scanned languages use an explicit plain-text fallback until a
+structural parser is added. Tree-sitter nodes stay inside the Python parsing adapter.
+If Tree-sitter reports syntax errors, definition subtrees containing errors are omitted and a
+diagnostic is returned; valid sibling definitions remain available. The parser does not invent
+symbols for malformed input.
+
+Code chunks keep complete symbols when they fit the configurable
+`CODEBASE_RAG_MAX_CHUNK_CHARS` limit (4,000 characters by default). Oversized symbols split on
+nested symbol and line boundaries where possible, then at a fixed character boundary. Prose
+chunks prefer document blocks and sentence or line boundaries. Chunk IDs and SHA-256 content hashes
+are deterministic, and every chunk carries file identity, source line spans, and applicable symbol
+or heading metadata.
+
 ---
 
 ## Development order
@@ -276,7 +294,7 @@ GitHub issues are the execution units for v0.1. Parsing, document ingestion, and
 
 ```text
 1. Repository ingestion and filtering — Issue #1 (complete)
-2. Parsing + document ingestion + structural/prose chunking — Issue #2
+2. Parsing + document ingestion + structural/prose chunking — Issue #2 (implemented; PR review pending)
    - Issue #3 is folded into Issue #2 and is not implemented separately
 3. Local embeddings + vector index + BM25 — Issue #4
 4. Hybrid retrieval + fusion + reranking — Issue #5

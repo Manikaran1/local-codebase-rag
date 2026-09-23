@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass(frozen=True)
@@ -35,6 +35,23 @@ class Symbol:
     span: SourceSpan
     parent_id: str | None = None
     signature: str | None = None
+
+
+@dataclass(frozen=True)
+class DocumentBlock:
+    kind: Literal["heading", "paragraph", "code"]
+    text: str
+    span: SourceSpan
+    heading_level: int | None = None
+    heading_path: tuple[str, ...] = ()
+    title: str | None = None
+    source_offset: int = 0
+
+
+@dataclass(frozen=True)
+class ParsedDocument:
+    blocks: tuple[DocumentBlock, ...]
+    is_fallback: bool = False
 
 
 @dataclass(frozen=True)

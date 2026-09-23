@@ -10,10 +10,11 @@ def test_default_configuration_is_local_first() -> None:
     assert settings.ollama_base_url.startswith("http://localhost")
 
 
-def test_ingestion_defaults_are_present_and_file_size_is_validated() -> None:
+def test_ingestion_defaults_are_present_and_limits_are_validated() -> None:
     settings = Settings(_env_file=None)
 
     assert settings.max_file_size_bytes == 2 * 1024 * 1024
+    assert settings.max_chunk_chars == 4000
     assert ".git/" in settings.default_ignore_patterns
     assert settings.supported_extensions[".py"] == "Python"
     assert settings.supported_extensions[".md"] == "Markdown"
@@ -21,3 +22,12 @@ def test_ingestion_defaults_are_present_and_file_size_is_validated() -> None:
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None, max_file_size_bytes=0)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, max_chunk_chars=0)
+
+
+def test_chunk_size_can_be_configured_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CODEBASE_RAG_MAX_CHUNK_CHARS", "250")
+
+    assert Settings(_env_file=None).max_chunk_chars == 250
