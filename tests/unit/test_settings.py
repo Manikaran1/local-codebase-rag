@@ -16,6 +16,14 @@ def test_default_configuration_is_local_first() -> None:
     assert settings.index_db_path == settings.data_dir / "indexes" / "index.sqlite3"
     assert settings.bm25_k1 == 1.5
     assert settings.bm25_b == 0.75
+    assert settings.retrieval_candidate_limit == 40
+    assert settings.retrieval_fusion_strategy == "weighted"
+    assert settings.retrieval_vector_weight == 0.5
+    assert settings.retrieval_lexical_weight == 0.5
+    assert settings.retrieval_rrf_k == 60
+    assert settings.retrieval_max_hits_per_file == 3
+    assert settings.retrieval_overlap_line_threshold == 0.8
+    assert settings.retrieval_overlap_text_threshold == 0.8
 
 
 def test_ingestion_defaults_are_present_and_limits_are_validated() -> None:
@@ -43,6 +51,19 @@ def test_ingestion_defaults_are_present_and_limits_are_validated() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, bm25_b=1.1)
 
+    for invalid in (
+        {"retrieval_candidate_limit": 0},
+        {"retrieval_fusion_strategy": "custom"},
+        {"retrieval_vector_weight": -0.1},
+        {"retrieval_vector_weight": 0.0, "retrieval_lexical_weight": 0.0},
+        {"retrieval_rrf_k": 0},
+        {"retrieval_max_hits_per_file": 0},
+        {"retrieval_overlap_line_threshold": 1.1},
+        {"retrieval_overlap_text_threshold": -0.1},
+    ):
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, **invalid)
+
 
 def test_chunk_size_can_be_configured_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CODEBASE_RAG_MAX_CHUNK_CHARS", "250")
@@ -56,6 +77,20 @@ def test_embedding_download_policy_can_be_configured_from_environment(
     monkeypatch.setenv("CODEBASE_RAG_EMBEDDING_ALLOW_DOWNLOAD", "true")
 
     assert Settings(_env_file=None).embedding_allow_download is True
+
+
+def test_retrieval_settings_can_be_configured_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CODEBASE_RAG_RETRIEVAL_CANDIDATE_LIMIT", "64")
+    monkeypatch.setenv("CODEBASE_RAG_RETRIEVAL_FUSION_STRATEGY", "rrf")
+    monkeypatch.setenv("CODEBASE_RAG_RETRIEVAL_MAX_HITS_PER_FILE", "2")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.retrieval_candidate_limit == 64
+    assert settings.retrieval_fusion_strategy == "rrf"
+    assert settings.retrieval_max_hits_per_file == 2
 
 
 def test_embedding_revision_can_be_configured_from_environment(
