@@ -102,6 +102,7 @@ Configuration should cover:
 - embedding backend/model
 - vector backend
 - retrieval weights
+- candidate limits, weighted/RRF strategy, and per-file selection thresholds
 - reranking
 - local LLM endpoint/model
 - context token budget
@@ -174,8 +175,15 @@ Expected steps:
 4. merge/deduplicate
 5. score fusion
 6. optional rerank
-7. diversity/source balancing
-8. return evidence with diagnostics
+7. conservative same-file redundant-evidence suppression
+8. per-file diversity selection with deferred-candidate backfill
+9. return final-ranked evidence with retrieval-owned diagnostics
+
+The retriever depends on `Embedder`, `VectorIndex`, and `LexicalIndex` interfaces. It preserves
+raw vector and BM25 scores, keeps each channel's rank independent, and assigns `SearchHit.rank`
+only after final selection. Weighted fusion normalizes cosine and query-local BM25 contributions;
+RRF is an alternative based on channel ranks. Neither score is an answer-confidence estimate.
+Diagnostics belong to retrieval and do not alter chunk metadata.
 
 ### `generation`
 Turns evidence into a bounded prompt and generates a response.

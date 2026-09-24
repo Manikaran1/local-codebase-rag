@@ -46,3 +46,19 @@ Generated answers should be evaluated for:
 ## Regression rule
 
 A retrieval implementation change should not be merged when it materially degrades the benchmark without a documented architectural reason.
+
+## Phase 5 focused regression gates
+
+The Issue #5 integration test indexes `examples/sample_repo` through the real scanner, processor,
+indexing service, SQLite vector index, and SQLite BM25 index. A deterministic controlled embedder
+maps the fixture concepts for authentication, database connections, retries/configuration, and
+documentation. It uses no network or LLM and validates retrieval mechanics rather than semantic
+quality from a production model.
+
+The initial engineering gates are:
+
+- single-source and identifier questions find their required source within top 5;
+- cross-file questions include all required source files within top 10.
+
+These are focused regression checks. Phase 7 remains responsible for a broader gold set, retrieval
+metrics, and formal quality thresholds.

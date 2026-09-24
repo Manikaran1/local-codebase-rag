@@ -1,10 +1,13 @@
 """Application configuration."""
 
+from __future__ import annotations
+
 from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
+from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024
@@ -88,6 +91,25 @@ class Settings(BaseSettings):
     vector_backend: str = "sqlite"
     bm25_k1: float = Field(default=1.5, gt=0)
     bm25_b: float = Field(default=0.75, ge=0, le=1)
+
+    retrieval_candidate_limit: int = Field(default=40, gt=0)
+    retrieval_fusion_strategy: Literal["weighted", "rrf"] = "weighted"
+    retrieval_vector_weight: float = Field(default=0.5, ge=0, allow_inf_nan=False)
+    retrieval_lexical_weight: float = Field(default=0.5, ge=0, allow_inf_nan=False)
+    retrieval_rrf_k: int = Field(default=60, gt=0)
+    retrieval_max_hits_per_file: int = Field(default=3, gt=0)
+    retrieval_overlap_line_threshold: float = Field(
+        default=0.8, ge=0, le=1, allow_inf_nan=False
+    )
+    retrieval_overlap_text_threshold: float = Field(
+        default=0.8, ge=0, le=1, allow_inf_nan=False
+    )
+
+    @model_validator(mode="after")
+    def validate_retrieval_weights(self) -> Settings:
+        if self.retrieval_vector_weight + self.retrieval_lexical_weight <= 0:
+            raise ValueError("the sum of retrieval fusion weights must be greater than zero")
+        return self
 
     @property
     def index_db_path(self) -> Path:
