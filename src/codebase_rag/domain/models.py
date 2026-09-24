@@ -71,10 +71,20 @@ class Chunk:
 
 
 @dataclass(frozen=True)
+class EmbeddingSpec:
+    """Stable provider/model/revision identity for vector compatibility checks."""
+
+    provider: str
+    model: str
+    revision: str
+    normalized: bool
+
+
+@dataclass(frozen=True)
 class SearchHit:
     chunk: Chunk
     rank: int
-    fusion_score: float
+    fusion_score: float | None = None
     vector_score: float | None = None
     lexical_score: float | None = None
     rerank_score: float | None = None

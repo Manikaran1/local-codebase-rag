@@ -125,7 +125,7 @@ For a deeper breakdown, see [`docs/architecture.md`](docs/architecture.md).
 | Validation/config | Pydantic + pydantic-settings |
 | Parsing | Tree-sitter + language adapters |
 | Embeddings | Sentence Transformers |
-| Vector storage | Adapter-based; initial local backend TBD |
+| Vector storage | SQLite + NumPy exact cosine reference backend |
 | Lexical retrieval | BM25 |
 | Local generation | Ollama-compatible adapter |
 | Testing | pytest |
@@ -286,6 +286,26 @@ chunks prefer document blocks and sentence or line boundaries. Chunk IDs and SHA
 are deterministic, and every chunk carries file identity, source line spans, and applicable symbol
 or heading metadata.
 
+### Local indexing
+
+Issue #4 adds independent project-scoped vector and BM25 indexes backed by
+`.codebase-rag/indexes/index.sqlite3`. The SQLite reference backend stores complete chunk metadata
+and float32 vectors; NumPy computes exact cosine scores. BM25 uses a deterministic tokenizer that
+preserves full identifiers and adds case-folded snake_case, camelCase, and PascalCase parts. File
+replacement updates both indexes in one transaction, and project/file deletion removes their
+persisted records.
+
+NumPy is installed with the core package. Install the optional Sentence Transformers provider with
+`pip install -e ".[dev,local-embeddings]"`. The default model is
+`sentence-transformers/all-MiniLM-L6-v2`, pinned to commit
+`1110a243fdf4706b3f48f1d95db1a4f5529b4d41`; it loads lazily from a local path or cache. For another
+Hub model, set `CODEBASE_RAG_EMBEDDING_REVISION` to its immutable 40-character commit SHA. For a
+local model directory, set it to a stable version or content fingerprint and update that identity
+whenever the model files change. Model downloads are disabled by default and require the explicit
+`CODEBASE_RAG_EMBEDDING_ALLOW_DOWNLOAD=true` setting. Repository chunks are never sent to an
+embedding API. Vector and BM25 searches expose raw component scores independently; score fusion and
+reranking remain later retrieval work.
+
 ---
 
 ## Development order
@@ -294,7 +314,7 @@ GitHub issues are the execution units for v0.1. Parsing, document ingestion, and
 
 ```text
 1. Repository ingestion and filtering — Issue #1 (complete)
-2. Parsing + document ingestion + structural/prose chunking — Issue #2 (implemented; PR review pending)
+2. Parsing + document ingestion + structural/prose chunking — Issue #2 (complete and merged)
    - Issue #3 is folded into Issue #2 and is not implemented separately
 3. Local embeddings + vector index + BM25 — Issue #4
 4. Hybrid retrieval + fusion + reranking — Issue #5

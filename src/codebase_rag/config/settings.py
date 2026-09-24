@@ -8,6 +8,8 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024
+DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+DEFAULT_EMBEDDING_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 
 DEFAULT_IGNORE_PATTERNS = (
     ".git/",
@@ -31,34 +33,36 @@ DEFAULT_IGNORE_PATTERNS = (
     "Thumbs.db",
 )
 
-DEFAULT_SUPPORTED_EXTENSIONS: Mapping[str, str] = MappingProxyType({
-    ".py": "Python",
-    ".md": "Markdown",
-    ".markdown": "Markdown",
-    ".txt": "text",
-    ".rst": "reStructuredText",
-    ".toml": "TOML",
-    ".yaml": "YAML",
-    ".yml": "YAML",
-    ".json": "JSON",
-    ".html": "HTML",
-    ".css": "CSS",
-    ".js": "JavaScript",
-    ".jsx": "JavaScript",
-    ".ts": "TypeScript",
-    ".tsx": "TypeScript",
-    ".java": "Java",
-    ".go": "Go",
-    ".rs": "Rust",
-    ".c": "C",
-    ".h": "C",
-    ".cpp": "C++",
-    ".hpp": "C++",
-    ".cs": "C#",
-    ".sh": "Shell",
-    ".sql": "SQL",
-    ".xml": "XML",
-})
+DEFAULT_SUPPORTED_EXTENSIONS: Mapping[str, str] = MappingProxyType(
+    {
+        ".py": "Python",
+        ".md": "Markdown",
+        ".markdown": "Markdown",
+        ".txt": "text",
+        ".rst": "reStructuredText",
+        ".toml": "TOML",
+        ".yaml": "YAML",
+        ".yml": "YAML",
+        ".json": "JSON",
+        ".html": "HTML",
+        ".css": "CSS",
+        ".js": "JavaScript",
+        ".jsx": "JavaScript",
+        ".ts": "TypeScript",
+        ".tsx": "TypeScript",
+        ".java": "Java",
+        ".go": "Go",
+        ".rs": "Rust",
+        ".c": "C",
+        ".h": "C",
+        ".cpp": "C++",
+        ".hpp": "C++",
+        ".cs": "C#",
+        ".sh": "Shell",
+        ".sql": "SQL",
+        ".xml": "XML",
+    }
+)
 
 
 class Settings(BaseSettings):
@@ -77,7 +81,18 @@ class Settings(BaseSettings):
     llm_model: str = ""
 
     embedding_provider: str = "sentence-transformers"
-    embedding_model: str = ""
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL
+    embedding_revision: str | None = None
+    embedding_allow_download: bool = False
+    embedding_batch_size: int = Field(default=32, gt=0)
+    vector_backend: str = "sqlite"
+    bm25_k1: float = Field(default=1.5, gt=0)
+    bm25_b: float = Field(default=0.75, ge=0, le=1)
+
+    @property
+    def index_db_path(self) -> Path:
+        """Return the shared local index database path."""
+        return self.data_dir / "indexes" / "index.sqlite3"
 
     model_config = SettingsConfigDict(
         env_prefix="CODEBASE_RAG_",
