@@ -302,8 +302,12 @@ file path
 content hash
 parser version
 chunker version
-embedding model/version
+embedding provider, model, immutable revision/fingerprint, dimension, and normalization policy
 ```
+
+The index stores this embedding identity with each project's vector metadata and rejects a search or
+upsert when the requested identity differs. Existing schema versions without revision metadata must
+be backed up and re-indexed before use with the current index schema.
 
 A later indexer can then classify each source as:
 - unchanged

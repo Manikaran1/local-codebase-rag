@@ -71,7 +71,7 @@ class IndexingService:
 
         if chunks:
             vectors = self.embedder.embed_documents([chunk.text for chunk in chunks])
-            dimension, vector_blobs = self.vector_index._prepare_vectors(chunks, vectors)
+            dimension, vector_blobs = self.vector_index.prepare_vectors(chunks, vectors)
             tokens = [tokenize(chunk.text) for chunk in chunks]
         else:
             dimension = None

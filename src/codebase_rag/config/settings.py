@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+DEFAULT_EMBEDDING_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 
 DEFAULT_IGNORE_PATTERNS = (
     ".git/",
@@ -81,6 +82,7 @@ class Settings(BaseSettings):
 
     embedding_provider: str = "sentence-transformers"
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
+    embedding_revision: str | None = None
     embedding_allow_download: bool = False
     embedding_batch_size: int = Field(default=32, gt=0)
     vector_backend: str = "sqlite"

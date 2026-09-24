@@ -3,14 +3,53 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Callable, Sequence
 from importlib import import_module
+from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 
-from codebase_rag.config.settings import DEFAULT_EMBEDDING_MODEL
+from codebase_rag.config.settings import (
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_EMBEDDING_REVISION,
+)
 from codebase_rag.domain.models import EmbeddingSpec
 from codebase_rag.embeddings.base import Embedder
 from codebase_rag.embeddings.errors import EmbeddingDependencyError, EmbeddingModelError
+
+_HUB_COMMIT_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
+
+
+def _is_local_model_path(model_name: str) -> bool:
+    path = Path(model_name).expanduser()
+    return (
+        path.exists()
+        or path.is_absolute()
+        or model_name.startswith(("./", "../", "~"))
+        or "\\" in model_name
+        or bool(PureWindowsPath(model_name).drive)
+    )
+
+
+def _resolve_revision(model_name: str, revision: str | None) -> str:
+    is_local_path = _is_local_model_path(model_name)
+    if revision is None or not revision.strip():
+        if model_name == DEFAULT_EMBEDDING_MODEL:
+            return DEFAULT_EMBEDDING_REVISION
+        requirement = (
+            "an explicit revision or fingerprint for local model paths"
+            if is_local_path
+            else "an explicit immutable revision (40-character Hub commit SHA) for Hub models"
+        )
+        raise ValueError(f"{requirement} is required for embedding model {model_name!r}.")
+
+    resolved = revision.strip()
+    if not is_local_path and not _HUB_COMMIT_PATTERN.fullmatch(resolved):
+        raise ValueError(
+            "Hub embedding revisions must be immutable 40-character commit SHAs; "
+            "mutable branch and tag names are not supported."
+        )
+    return resolved.lower() if _HUB_COMMIT_PATTERN.fullmatch(resolved) else resolved
 
 
 def _sentence_transformer_class() -> Callable[..., Any]:
@@ -31,6 +70,7 @@ class SentenceTransformerEmbedder(Embedder):
         self,
         model_name: str = DEFAULT_EMBEDDING_MODEL,
         *,
+        revision: str | None = None,
         allow_download: bool = False,
         batch_size: int = 32,
         model_factory: Callable[..., Any] | None = None,
@@ -39,7 +79,9 @@ class SentenceTransformerEmbedder(Embedder):
             raise ValueError("model_name must not be empty")
         if batch_size <= 0:
             raise ValueError("batch_size must be greater than zero")
-        self._model_name = model_name
+        self._model_name = model_name.strip()
+        self._revision = _resolve_revision(self._model_name, revision)
+        self._is_local_path = _is_local_model_path(self._model_name)
         self._allow_download = allow_download
         self._batch_size = batch_size
         self._model_factory = model_factory
@@ -51,6 +93,7 @@ class SentenceTransformerEmbedder(Embedder):
         return EmbeddingSpec(
             provider="sentence-transformers",
             model=self._model_name,
+            revision=self._revision,
             normalized=True,
         )
 
@@ -124,10 +167,15 @@ class SentenceTransformerEmbedder(Embedder):
         factory = self._model_factory or _sentence_transformer_class()
         if self._model is None:
             try:
+                options: dict[str, Any] = {
+                    "device": "cpu",
+                    "local_files_only": not self._allow_download,
+                }
+                if not self._is_local_path:
+                    options["revision"] = self._revision
                 self._model = factory(
                     self._model_name,
-                    device="cpu",
-                    local_files_only=not self._allow_download,
+                    **options,
                 )
             except Exception as error:
                 mode = "download-enabled mode" if self._allow_download else "offline mode"

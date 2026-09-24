@@ -297,10 +297,14 @@ persisted records.
 
 NumPy is installed with the core package. Install the optional Sentence Transformers provider with
 `pip install -e ".[dev,local-embeddings]"`. The default model is
-`sentence-transformers/all-MiniLM-L6-v2`; it loads lazily from a local path or cache. Model downloads
-are disabled by default and require the explicit `CODEBASE_RAG_EMBEDDING_ALLOW_DOWNLOAD=true`
-setting. Repository chunks are never sent to an embedding API. Vector and BM25 searches expose raw
-component scores independently; score fusion and reranking remain later retrieval work.
+`sentence-transformers/all-MiniLM-L6-v2`, pinned to commit
+`1110a243fdf4706b3f48f1d95db1a4f5529b4d41`; it loads lazily from a local path or cache. For another
+Hub model, set `CODEBASE_RAG_EMBEDDING_REVISION` to its immutable 40-character commit SHA. For a
+local model directory, set it to a stable version or content fingerprint and update that identity
+whenever the model files change. Model downloads are disabled by default and require the explicit
+`CODEBASE_RAG_EMBEDDING_ALLOW_DOWNLOAD=true` setting. Repository chunks are never sent to an
+embedding API. Vector and BM25 searches expose raw component scores independently; score fusion and
+reranking remain later retrieval work.
 
 ---
 

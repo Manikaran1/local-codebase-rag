@@ -20,7 +20,10 @@ class DeterministicFakeEmbedder(Embedder):
     @property
     def spec(self) -> EmbeddingSpec:
         return EmbeddingSpec(
-            provider="fake-sha256", model=f"sha256-{self.dimension}-v1", normalized=True
+            provider="fake-sha256",
+            model=f"sha256-{self.dimension}-v1",
+            revision="test-v1",
+            normalized=True,
         )
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:

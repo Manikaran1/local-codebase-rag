@@ -9,6 +9,7 @@ from codebase_rag.domain.models import Chunk, EmbeddingSpec, SourceSpan
 from codebase_rag.index.storage import (
     IndexConfigurationError,
     IndexCorruptionError,
+    IndexStorageError,
     SQLiteIndexStore,
 )
 from codebase_rag.index.vector import SQLiteVectorIndex
@@ -39,7 +40,7 @@ def _chunk(
 
 
 def _index(tmp_path: Path, spec: EmbeddingSpec | None = None) -> SQLiteVectorIndex:
-    resolved_spec = spec or EmbeddingSpec("fake", "model-a", True)
+    resolved_spec = spec or EmbeddingSpec("fake", "model-a", "revision-a", True)
     return SQLiteVectorIndex(SQLiteIndexStore(tmp_path / "index.sqlite3"), resolved_spec)
 
 
@@ -87,6 +88,7 @@ def test_schema_and_project_metadata_record_versions_and_float32_storage(tmp_pat
     assert metadata is not None
     assert metadata["embedding_provider"] == "fake"
     assert metadata["embedding_model"] == "model-a"
+    assert metadata["embedding_revision"] == "revision-a"
     assert metadata["vector_dimension"] == 2
     assert metadata["vectors_normalized"] == 1
     assert metadata["vector_format_version"] == 1
@@ -104,7 +106,7 @@ def test_schema_and_project_metadata_record_versions_and_float32_storage(tmp_pat
             ).fetchall()
         }
 
-    assert schema["value"] == "1"
+    assert schema["value"] == "2"
     assert record["dimension"] == 2
     assert len(record["vector"]) == 8
     assert {"chunks_project_idx", "chunks_project_file_idx"} <= index_names
@@ -134,13 +136,97 @@ def test_dimension_and_embedding_model_mismatches_are_rejected_without_replacing
 
     with pytest.raises(IndexConfigurationError, match="vector_dimension"):
         first.upsert([chunk], [[1.0, 0.0, 0.0]])
-    other_model = _index(tmp_path, EmbeddingSpec("fake", "model-b", True))
-    with pytest.raises(IndexConfigurationError, match="embedding_model"):
+    other_model = _index(tmp_path, EmbeddingSpec("fake", "model-b", "revision-a", True))
+    with pytest.raises(IndexConfigurationError, match="model='model-a'.*model='model-b'"):
         other_model.upsert([chunk], [[0.0, 1.0]])
 
     assert first.search("project-a", [1.0, 0.0], limit=1)[0].chunk == chunk
     with pytest.raises(IndexConfigurationError, match="vector_dimension"):
         first.search("project-a", [1.0, 0.0, 0.0], limit=1)
+
+
+def test_revision_mismatch_is_rejected_on_upsert_and_search(tmp_path: Path) -> None:
+    chunk = _chunk("revision-stable")
+    first = _index(tmp_path)
+    first.upsert([chunk], [[1.0, 0.0]])
+
+    other_revision = _index(
+        tmp_path, EmbeddingSpec("fake", "model-a", "revision-b", True)
+    )
+    with pytest.raises(IndexConfigurationError, match="revision-a.*revision-b"):
+        other_revision.upsert([chunk], [[0.0, 1.0]])
+    with pytest.raises(IndexConfigurationError, match="revision-a.*revision-b"):
+        other_revision.search("project-a", [0.0, 1.0], limit=1)
+
+    assert first.search("project-a", [1.0, 0.0], limit=1)[0].chunk == chunk
+
+
+def test_revision_metadata_survives_reopen_and_requires_matching_identity(
+    tmp_path: Path,
+) -> None:
+    chunk = _chunk("revision-reopen")
+    original = _index(tmp_path)
+    original.upsert([chunk], [[1.0, 0.0]])
+
+    reopened = _index(tmp_path, EmbeddingSpec("fake", "model-a", "revision-a", True))
+    assert reopened.search("project-a", [1.0, 0.0], limit=1)[0].chunk == chunk
+
+    incompatible = _index(tmp_path, EmbeddingSpec("fake", "model-a", "revision-b", True))
+    with pytest.raises(IndexConfigurationError, match="revision-a.*revision-b"):
+        incompatible.search("project-a", [1.0, 0.0], limit=1)
+
+
+def test_missing_stored_revision_is_not_filled_during_upsert(tmp_path: Path) -> None:
+    chunk = _chunk("revision-missing")
+    index = _index(tmp_path)
+    index.upsert([chunk], [[1.0, 0.0]])
+    with index.store.transaction() as connection:
+        connection.execute(
+            "UPDATE project_index_metadata SET embedding_revision = NULL "
+            "WHERE project_id = ?",
+            ("project-a",),
+        )
+
+    with pytest.raises(IndexCorruptionError, match="incomplete embedding metadata"):
+        index.upsert([chunk], [[0.0, 1.0]])
+
+    metadata = index.store.project_metadata("project-a")
+    assert metadata is not None
+    assert metadata["embedding_revision"] is None
+    assert [row["chunk_id"] for row in index.store.vector_rows("project-a")] == [chunk.id]
+
+
+def test_missing_embedding_identity_is_not_reassigned_to_existing_vectors(tmp_path: Path) -> None:
+    chunk = _chunk("identity-missing")
+    index = _index(tmp_path)
+    index.upsert([chunk], [[1.0, 0.0]])
+    with index.store.transaction() as connection:
+        connection.execute(
+            "UPDATE project_index_metadata SET embedding_provider = NULL, "
+            "embedding_model = NULL, embedding_revision = NULL, vector_dimension = NULL "
+            "WHERE project_id = ?",
+            ("project-a",),
+        )
+
+    with pytest.raises(IndexCorruptionError, match="vectors without embedding identity"):
+        index.upsert([chunk], [[0.0, 1.0]])
+
+    assert [row["chunk_id"] for row in index.store.vector_rows("project-a")] == [chunk.id]
+    metadata = index.store.project_metadata("project-a")
+    assert metadata is not None
+    assert metadata["embedding_model"] is None
+    assert metadata["embedding_revision"] is None
+
+
+def test_schema_v1_requires_rebuilding_the_index(tmp_path: Path) -> None:
+    index = _index(tmp_path)
+    with index.store.transaction() as connection:
+        connection.execute(
+            "UPDATE schema_metadata SET value = '1' WHERE key = 'schema_version'"
+        )
+
+    with pytest.raises(IndexStorageError, match="requires 2.*re-index"):
+        SQLiteIndexStore(tmp_path / "index.sqlite3")
 
 
 def test_same_chunk_id_upsert_replaces_vector_and_chunk_data(tmp_path: Path) -> None:

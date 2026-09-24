@@ -72,8 +72,11 @@ class Chunk:
 
 @dataclass(frozen=True)
 class EmbeddingSpec:
+    """Stable provider/model/revision identity for vector compatibility checks."""
+
     provider: str
     model: str
+    revision: str
     normalized: bool
 
 

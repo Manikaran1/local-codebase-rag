@@ -8,6 +8,8 @@ import pytest
 from codebase_rag.embeddings.errors import EmbeddingDependencyError, EmbeddingModelError
 from codebase_rag.embeddings.sentence_transformer import SentenceTransformerEmbedder
 
+_MODEL_REVISION = "0123456789abcdef0123456789abcdef01234567"
+
 
 class _StubModel:
     def __init__(self) -> None:
@@ -36,7 +38,12 @@ def test_sentence_transformer_loads_lazily_batches_and_normalizes() -> None:
         factory_calls.append((model_name, kwargs))
         return model
 
-    embedder = SentenceTransformerEmbedder("local-model", batch_size=12, model_factory=factory)
+    embedder = SentenceTransformerEmbedder(
+        "sentence-transformers/test-model",
+        revision=_MODEL_REVISION,
+        batch_size=12,
+        model_factory=factory,
+    )
 
     assert factory_calls == []
     vectors = embedder.embed_documents(["first", "second"])
@@ -52,7 +59,13 @@ def test_sentence_transformer_loads_lazily_batches_and_normalizes() -> None:
         assert options["convert_to_numpy"] is True
         assert options["show_progress_bar"] is False
         assert options["device"] == "cpu"
-    assert factory_calls == [("local-model", {"device": "cpu", "local_files_only": True})]
+    assert factory_calls == [
+        (
+            "sentence-transformers/test-model",
+            {"device": "cpu", "local_files_only": True, "revision": _MODEL_REVISION},
+        )
+    ]
+    assert embedder.spec.revision == _MODEL_REVISION
     assert model.eval_calls == 1
 
 
@@ -86,12 +99,16 @@ def test_offline_model_failure_explains_local_path_or_explicit_download() -> Non
         factory_options.append(kwargs)
         raise OSError("model not cached")
 
-    embedder = SentenceTransformerEmbedder("private-model", model_factory=factory)
+    embedder = SentenceTransformerEmbedder(
+        "private-model", revision=_MODEL_REVISION, model_factory=factory
+    )
 
     with pytest.raises(EmbeddingModelError, match="local model directory") as error:
         embedder.embed_query("query")
 
-    assert factory_options == [{"device": "cpu", "local_files_only": True}]
+    assert factory_options == [
+        {"device": "cpu", "local_files_only": True, "revision": _MODEL_REVISION}
+    ]
     assert "CODEBASE_RAG_EMBEDDING_ALLOW_DOWNLOAD=true" in str(error.value)
 
 
@@ -103,11 +120,18 @@ def test_download_is_only_enabled_by_explicit_opt_in() -> None:
         factory_options.append(kwargs)
         return model
 
-    embedder = SentenceTransformerEmbedder("model-id", allow_download=True, model_factory=factory)
+    embedder = SentenceTransformerEmbedder(
+        "model-id",
+        revision=_MODEL_REVISION,
+        allow_download=True,
+        model_factory=factory,
+    )
 
     embedder.embed_query("query")
 
-    assert factory_options == [{"device": "cpu", "local_files_only": False}]
+    assert factory_options == [
+        {"device": "cpu", "local_files_only": False, "revision": _MODEL_REVISION}
+    ]
 
 
 def test_mismatched_output_count_fails_clearly() -> None:
@@ -121,3 +145,36 @@ def test_mismatched_output_count_fails_clearly() -> None:
 
     with pytest.raises(EmbeddingModelError, match="0 vectors for 1 inputs"):
         embedder.embed_documents(["text"])
+
+
+def test_default_revision_is_pinned_and_custom_model_requires_revision(tmp_path) -> None:
+    default_embedder = SentenceTransformerEmbedder()
+    assert default_embedder.spec.revision == "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+
+    with pytest.raises(ValueError, match="explicit immutable revision"):
+        SentenceTransformerEmbedder("custom/model")
+    with pytest.raises(ValueError, match="immutable 40-character commit SHAs"):
+        SentenceTransformerEmbedder("custom/model", revision="main")
+
+    local_model = tmp_path / "model"
+    local_model.mkdir()
+    with pytest.raises(ValueError, match="explicit revision or fingerprint"):
+        SentenceTransformerEmbedder(str(local_model))
+
+
+def test_local_model_uses_explicit_fingerprint_without_hub_revision(tmp_path) -> None:
+    local_model = tmp_path / "model"
+    local_model.mkdir()
+    factory_options: list[dict[str, object]] = []
+
+    def factory(model_name: str, **kwargs: object) -> _StubModel:
+        factory_options.append(kwargs)
+        return _StubModel()
+
+    embedder = SentenceTransformerEmbedder(
+        str(local_model), revision="sha256:content-fingerprint", model_factory=factory
+    )
+
+    assert embedder.spec.revision == "sha256:content-fingerprint"
+    embedder.embed_query("query")
+    assert factory_options == [{"device": "cpu", "local_files_only": True}]

@@ -22,8 +22,12 @@ class SQLiteVectorIndex(VectorIndex):
     """Persist float32 embeddings and search them with exact cosine similarity."""
 
     def __init__(self, store: SQLiteIndexStore, embedding_spec: EmbeddingSpec) -> None:
-        if not embedding_spec.provider.strip() or not embedding_spec.model.strip():
-            raise ValueError("embedding provider and model must not be empty")
+        if (
+            not embedding_spec.provider.strip()
+            or not embedding_spec.model.strip()
+            or not embedding_spec.revision.strip()
+        ):
+            raise ValueError("embedding provider, model, and revision must not be empty")
         self.store = store
         self.embedding_spec = embedding_spec
 
@@ -32,7 +36,7 @@ class SQLiteVectorIndex(VectorIndex):
         return cls(SQLiteIndexStore(data_dir / "indexes" / "index.sqlite3"), embedding_spec)
 
     def upsert(self, chunks: list[Chunk], vectors: list[list[float]]) -> None:
-        dimension, vector_blobs = self._prepare_vectors(chunks, vectors)
+        dimension, vector_blobs = self.prepare_vectors(chunks, vectors)
         if not chunks:
             return
         with self.store.transaction() as connection:
@@ -110,11 +114,12 @@ class SQLiteVectorIndex(VectorIndex):
     def delete_project(self, project_id: str) -> int:
         return self.store.delete_project(project_id)
 
-    def _prepare_vectors(
+    def prepare_vectors(
         self,
         chunks: list[Chunk],
         vectors: list[list[float]],
     ) -> tuple[int, list[bytes]]:
+        """Validate and encode vectors before an atomic file replacement."""
         if len(chunks) != len(vectors):
             raise ValueError("chunks and vectors must have equal lengths")
         if not chunks:
@@ -172,9 +177,28 @@ def _check_embedding_metadata(
     spec: EmbeddingSpec,
     dimension: int,
 ) -> None:
+    stored_identity = {
+        "provider": metadata.get("embedding_provider"),
+        "model": metadata.get("embedding_model"),
+        "revision": metadata.get("embedding_revision"),
+    }
+    requested_identity = {
+        "provider": spec.provider,
+        "model": spec.model,
+        "revision": spec.revision,
+    }
+    for key, value in stored_identity.items():
+        if value is None:
+            raise IndexCorruptionError(f"Project vector metadata is missing embedding {key!r}.")
+    if stored_identity != requested_identity:
+        raise IndexConfigurationError(
+            f"Project index uses embedding identity provider={stored_identity['provider']!r}, "
+            f"model={stored_identity['model']!r}, revision={stored_identity['revision']!r}; "
+            f"requested provider={spec.provider!r}, model={spec.model!r}, "
+            f"revision={spec.revision!r}. Rebuild the project index to change embedding space."
+        )
+
     expected: dict[str, object] = {
-        "embedding_provider": spec.provider,
-        "embedding_model": spec.model,
         "vector_dimension": dimension,
         "vectors_normalized": int(spec.normalized),
         "vector_format_version": VECTOR_FORMAT_VERSION,

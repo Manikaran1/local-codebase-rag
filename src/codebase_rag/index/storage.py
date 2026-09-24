@@ -11,7 +11,7 @@ from typing import Literal
 
 from codebase_rag.domain.models import Chunk, EmbeddingSpec, SourceSpan
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 VECTOR_FORMAT_VERSION = 1
 
 
@@ -74,7 +74,8 @@ class SQLiteIndexStore:
             elif version_row["value"] != str(SCHEMA_VERSION):
                 raise IndexStorageError(
                     f"SQLite index schema version {version_row['value']} is unsupported; "
-                    f"this version requires {SCHEMA_VERSION}. Back up and migrate or re-index."
+                    f"this version requires {SCHEMA_VERSION}. Back up the old database and "
+                    "re-index; automatic migration is not supported."
                 )
 
             statements = (
@@ -95,6 +96,7 @@ class SQLiteIndexStore:
                 "tokens_json TEXT NOT NULL, token_count INTEGER NOT NULL CHECK(token_count >= 0))",
                 "CREATE TABLE IF NOT EXISTS project_index_metadata ("
                 "project_id TEXT PRIMARY KEY, embedding_provider TEXT, embedding_model TEXT, "
+                "embedding_revision TEXT, "
                 "vector_dimension INTEGER, vectors_normalized INTEGER "
                 "CHECK(vectors_normalized IN (0, 1)), vector_format_version INTEGER, "
                 "tokenizer_version TEXT, bm25_k1 REAL, bm25_b REAL)",
@@ -153,9 +155,63 @@ class SQLiteIndexStore:
         if dimension <= 0:
             raise ValueError("embedding dimension must be greater than zero")
         SQLiteIndexStore._ensure_project_metadata(connection, project_id)
+        row = connection.execute(
+            "SELECT embedding_provider, embedding_model, embedding_revision, vector_dimension "
+            "FROM project_index_metadata WHERE project_id = ?",
+            (project_id,),
+        ).fetchone()
+        if row is None:
+            raise IndexCorruptionError(f"Project index metadata is missing for {project_id!r}.")
+        stored_identity = {
+            "provider": row["embedding_provider"],
+            "model": row["embedding_model"],
+            "revision": row["embedding_revision"],
+        }
+        identity_values = tuple(stored_identity.values())
+        if any(value is not None for value in identity_values) and (
+            any(value is None for value in identity_values)
+            or row["vector_dimension"] is None
+        ):
+            raise IndexCorruptionError(
+                f"Project {project_id!r} has incomplete embedding metadata. "
+                "Back up and rebuild the project index."
+            )
+        if all(value is None for value in identity_values) and row["vector_dimension"] is not None:
+            raise IndexCorruptionError(
+                f"Project {project_id!r} has a vector dimension without embedding identity. "
+                "Back up and rebuild the project index."
+            )
+        if all(value is None for value in identity_values):
+            existing_vector = connection.execute(
+                "SELECT 1 FROM vectors AS v JOIN chunks AS c ON c.chunk_id = v.chunk_id "
+                "WHERE c.project_id = ? LIMIT 1",
+                (project_id,),
+            ).fetchone()
+            if existing_vector is not None:
+                raise IndexCorruptionError(
+                    f"Project {project_id!r} has vectors without embedding identity. "
+                    "Back up and rebuild the project index."
+                )
+        requested_identity = {
+            "provider": spec.provider,
+            "model": spec.model,
+            "revision": spec.revision,
+        }
+        if any(
+            stored_identity[key] is not None and stored_identity[key] != value
+            for key, value in requested_identity.items()
+        ):
+            raise IndexConfigurationError(
+                f"Project {project_id!r} uses embedding identity "
+                f"provider={stored_identity['provider']!r}, model={stored_identity['model']!r}, "
+                f"revision={stored_identity['revision']!r}; requested "
+                f"provider={spec.provider!r}, model={spec.model!r}, revision={spec.revision!r}. "
+                "Rebuild the project index to change embedding space."
+            )
         expected: dict[str, str | int] = {
             "embedding_provider": spec.provider,
             "embedding_model": spec.model,
+            "embedding_revision": spec.revision,
             "vector_dimension": dimension,
             "vectors_normalized": int(spec.normalized),
             "vector_format_version": VECTOR_FORMAT_VERSION,

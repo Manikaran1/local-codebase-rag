@@ -2,7 +2,7 @@
 
 ## Current state
 
-**Stage:** Phases 1–3 complete and merged; Issue #4 implementation complete and pending PR review
+**Stage:** Phases 1–3 complete and merged; Issue #4 implementation complete; PR review pending
 **Target:** v0.1.0  
 **Visibility recommendation:** Private until the retrieval core is demonstrably usable.
 
