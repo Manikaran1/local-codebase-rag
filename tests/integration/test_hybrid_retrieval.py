@@ -82,15 +82,36 @@ def test_sample_repository_hybrid_retrieval_regressions(tmp_path: Path) -> None:
     project_id = sources[0].project_id
 
     single_source_cases = (
-        ("Where is authentication handled?", "auth.py"),
-        ("Where is the database connection created?", "database.py"),
-        ("What controls retry count?", "config.py"),
-        ("What is MAX_RETRIES set to?", "config.py"),
-        ("Where is the fixture repository guide?", "README.md"),
+        ("Where is authentication handled?", "auth.py", "authenticate", None, None),
+        ("Where is the database connection created?", "database.py", "connect", None, None),
+        ("What controls retry count?", "config.py", None, "MAX_RETRIES = 3", None),
+        ("What is MAX_RETRIES set to?", "config.py", None, "MAX_RETRIES = 3", None),
+        (
+            "Where is the fixture repository guide?",
+            "guide.md",
+            None,
+            "This fixture describes the sample repository.",
+            "Repository guide",
+        ),
     )
-    for query, expected_file in single_source_cases:
+    for (
+        query,
+        expected_file,
+        expected_symbol,
+        expected_text,
+        expected_heading,
+    ) in single_source_cases:
         result = retriever.retrieve(project_id, query, limit=5)
-        assert any(hit.chunk.relative_path.name == expected_file for hit in result.hits[:5]), query
+        assert any(
+            hit.chunk.relative_path.name == expected_file
+            and (expected_symbol is None or hit.chunk.symbol_name == expected_symbol)
+            and (expected_text is None or expected_text in hit.chunk.text)
+            and (
+                expected_heading is None
+                or expected_heading in hit.chunk.metadata.get("heading_path", [])
+            )
+            for hit in result.hits[:5]
+        ), query
 
     cross_file = retriever.retrieve(project_id, "Explain auth and DB interaction", limit=10)
     top_ten_files = {hit.chunk.relative_path.name for hit in cross_file.hits[:10]}

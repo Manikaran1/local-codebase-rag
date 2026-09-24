@@ -325,7 +325,7 @@ def test_rrf_uses_independent_channel_ranks_custom_k_weights_and_id_ties() -> No
     assert by_id["tie-a"].rank < by_id["tie-z"].rank
 
 
-def test_duplicate_backend_hits_resolve_by_score_then_rank_not_iteration_order() -> None:
+def test_duplicate_vector_hits_keep_max_score_and_min_rank_independent_of_order() -> None:
     def run(hits: list[SearchHit]) -> RetrievalResult:
         retriever, _, _, _ = _retriever(hits, [])
         return retriever.retrieve("project-a", "duplicate")
@@ -338,11 +338,59 @@ def test_duplicate_backend_hits_resolve_by_score_then_rank_not_iteration_order()
     first = run(candidates)
     second = run(list(reversed(candidates)))
 
-    assert first.hits == second.hits
+    assert first == second
+    assert len(first.hits) == 1
     assert first.hits[0].vector_score == 0.9
     trace = first.diagnostics.candidate_traces[0]
-    assert trace.vector_rank == 3
+    assert trace.vector_rank == 1
+    assert trace.raw_vector_score == 0.9
     assert first.diagnostics.duplicate_backend_hit_count == 2
+
+
+def test_duplicate_lexical_hits_keep_max_score_and_min_rank_independently() -> None:
+    retriever, _, _, _ = _retriever(
+        [],
+        [
+            _hit("same", "same text", rank=1, lexical=0.6),
+            _hit("same", "same text", rank=4, lexical=0.9),
+            _hit("same", "same text", rank=3, lexical=0.9),
+        ],
+    )
+
+    result = retriever.retrieve("project-a", "duplicate")
+
+    assert len(result.hits) == 1
+    assert result.hits[0].lexical_score == 0.9
+    trace = result.diagnostics.candidate_traces[0]
+    assert trace.lexical_rank == 1
+    assert trace.raw_lexical_score == 0.9
+    assert result.diagnostics.duplicate_backend_hit_count == 2
+
+
+def test_rrf_duplicate_hit_uses_best_rank_independent_of_max_score() -> None:
+    retriever, _, _, _ = _retriever(
+        [
+            _hit("a", "chunk A", rank=1, vector=0.5),
+            _hit("a", "chunk A", rank=4, vector=0.9),
+            _hit("b", "chunk B", rank=2, vector=0.8),
+        ],
+        [],
+        fusion_strategy="rrf",
+        vector_weight=1.0,
+        lexical_weight=1.0,
+        rrf_k=10,
+    )
+
+    result = retriever.retrieve("project-a", "duplicate", limit=10)
+    by_id = {hit.chunk.id: hit for hit in result.hits}
+    traces = {trace.chunk_id: trace for trace in result.diagnostics.candidate_traces}
+
+    assert [hit.chunk.id for hit in result.hits[:2]] == ["a", "b"]
+    assert by_id["a"].fusion_score == pytest.approx(1 / 11)
+    assert by_id["b"].fusion_score == pytest.approx(1 / 12)
+    assert traces["a"].vector_rank == 1
+    assert traces["a"].raw_vector_score == 0.9
+    assert result.diagnostics.duplicate_backend_hit_count == 1
 
 
 def test_noop_reranker_keeps_fused_order_and_leaves_rerank_scores_missing() -> None:

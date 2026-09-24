@@ -267,10 +267,9 @@ class HybridRetriever:
             old_rank = getattr(state, rank_field)
             if old_score is not None:
                 duplicate_count += 1
-            if old_score is None or score > old_score or (
-                score == old_score and (old_rank is None or hit.rank < old_rank)
-            ):
+            if old_score is None or score > old_score:
                 setattr(state, score_field, score)
+            if old_rank is None or hit.rank < old_rank:
                 setattr(state, rank_field, hit.rank)
         return duplicate_count
 
