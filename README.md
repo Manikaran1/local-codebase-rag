@@ -250,7 +250,8 @@ The project currently contains:
 - module boundaries
 - project configuration
 - implemented repository ingestion and filtering
-- source-package skeleton for later stages
+- parsing, structural/prose chunking, and local indexing
+- project-scoped hybrid retrieval with inspectable scores and diagnostics
 - test and evaluation foundations
 - CI definition
 - contribution and security guidance
@@ -303,8 +304,23 @@ Hub model, set `CODEBASE_RAG_EMBEDDING_REVISION` to its immutable 40-character c
 local model directory, set it to a stable version or content fingerprint and update that identity
 whenever the model files change. Model downloads are disabled by default and require the explicit
 `CODEBASE_RAG_EMBEDDING_ALLOW_DOWNLOAD=true` setting. Repository chunks are never sent to an
-embedding API. Vector and BM25 searches expose raw component scores independently; score fusion and
-reranking remain later retrieval work.
+embedding API. Vector and BM25 searches expose raw component scores independently.
+
+### Hybrid retrieval
+
+Issue #5 adds `HybridRetriever.retrieve(project_id, query, limit=10)`. It embeds one conservatively
+normalized query, searches the project-scoped vector and BM25 interfaces, merges candidates by
+chunk ID, and returns final `SearchHit` values with raw component scores, fusion scores, and
+retrieval-owned diagnostics. Weighted fusion is the default: cosine is clamped to `[0, 1]`, BM25 is
+divided by the query's maximum BM25 score, and normalized weights combine the two contributions.
+RRF is available as an alternative. Fusion scores are ranking values, not confidence estimates.
+
+The default reranker is a no-op contract. Redundant overlapping evidence is suppressed only when
+same-file line spans overlap strongly and the shorter whitespace-normalized text is substantially
+contained in the longer text. Selection prefers up to three chunks per file, then backfills deferred
+chunks if the requested result count is not met. Candidate ranks, raw and normalized scores,
+selection reasons, and final ranks are available through `RetrievalDiagnostics`; no retrieval debug
+CLI is added in this phase.
 
 ---
 
@@ -316,8 +332,8 @@ GitHub issues are the execution units for v0.1. Parsing, document ingestion, and
 1. Repository ingestion and filtering — Issue #1 (complete)
 2. Parsing + document ingestion + structural/prose chunking — Issue #2 (complete and merged)
    - Issue #3 is folded into Issue #2 and is not implemented separately
-3. Local embeddings + vector index + BM25 — Issue #4
-4. Hybrid retrieval + fusion + reranking — Issue #5
+3. Local embeddings + vector index + BM25 — Issue #4 (complete and merged)
+4. Hybrid retrieval + fusion + reranking — Issue #5 (implementation complete; PR review pending)
 5. Citation-aware generation + CLI workflow — Issue #6
 6. Retrieval evaluation and regression gates — Issue #7
 7. FastAPI application surface — Issue #8

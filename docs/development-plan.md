@@ -80,7 +80,7 @@ Exit condition:
 - chunks can be indexed, retrieved, removed, and re-indexed deterministically
 
 Status:
-- implementation complete; PR review pending
+- complete and merged
 
 ## Phase 5 — Hybrid retrieval — GitHub Issue #5
 
@@ -95,8 +95,12 @@ Deliverables:
 - source diversity handling
 
 Exit condition:
-- evaluation questions retrieve required evidence in top-k at agreed thresholds
+- single-source and identifier questions retrieve required evidence within top 5
+- cross-file questions retrieve every required source within top 10
 - raw vector, lexical, and fused scores remain inspectable
+
+Status:
+- implementation complete; PR review pending (not merged)
 
 ## Phase 6 — Citation-aware generation and CLI — GitHub Issue #6
 
